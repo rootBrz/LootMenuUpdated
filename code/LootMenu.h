@@ -283,7 +283,7 @@ namespace LootMenu
 		if (isVisible)
 		{
 			TESObjectREFR* newRef = HUDMainMenu::GetSingleton()->crosshairRef;
-			if (!IsVATSKillCamActive() && newRef && !IsLockedRef(newRef) && !g_thePlayer->eGrabType && (!HasScript(newRef) || (!newRef->ResolveAshpile()->HasOpenCloseActivateScriptBlocks() && newRef->ResolveAshpile()->IsActor())))
+			if (!IsVATSKillCamActive() && newRef && !IsLockedRef(newRef) && g_thePlayer->eGrabType != PlayerCharacter::GrabMode::kGrabMode_ZKey && (!HasScript(newRef) || (!newRef->ResolveAshpile()->HasOpenCloseActivateScriptBlocks() && newRef->ResolveAshpile()->IsActor())))
 			{
 				newRef = newRef->ResolveAshpile();
 				if (newRef != ref)
@@ -647,7 +647,7 @@ namespace LootMenu
 		if (!ref) return;
 
 		auto hudRef = HUDMainMenu::GetSingleton()->crosshairRef;
-		if (!hudRef || !(hudRef->ResolveAshpile()->GetContainer()) || hudRef->IsActor() != ref->IsActor())
+		if (!hudRef || !(hudRef->ResolveAshpile()->GetContainer()) || hudRef != ref)
 		{
 			ResetAndHideMenu();
 			SetVisible(false);
@@ -747,14 +747,24 @@ namespace LootMenu
 		}
 
 		_declspec(naked) void __fastcall HideLootMenu_OnGrab() {
-			constexpr static UInt32 origAddr = 0x00475686; // Address after the fld
+			constexpr static UInt32 origAddr = 0x00475686;
 			_asm
 			{
-				push    ecx
+				pushad
+				pushfd
+
 				mov     ecx, 0
+				mov     edx, 0
 				call    SetVisible
-				pop     ecx
-				sub     esp, 12             
+
+				push    0
+				call    SetContainer
+				add     esp, 4
+
+				popfd
+				popad
+
+				sub     esp, 12
 				fld     dword ptr[ecx + 4]
 				jmp     origAddr
 			}
