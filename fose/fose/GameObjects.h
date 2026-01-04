@@ -446,13 +446,21 @@ public:
 		kControlFlag_Sneak			= 1 << 6,
 	};
 
+	enum GrabMode
+	{
+		kGrabMode_ZKey = 0x1,
+		kGrabMode_Telekenesis = 0x3,
+	};
+
 	UInt32								unk188[(0x570-0x1C8) >> 2];		// 188
 	BGSNote								* note;							// 570
 	UInt32								unk574;							// 574
 	ImageSpaceModifierInstanceDOF		* unk578;						// 578
 	ImageSpaceModifierInstanceDOF		* unk57C;						// 57C
 	ImageSpaceModifierInstanceDRB		* unk580;						// 580
-	UInt32								unk584[(0x5A8 - 0x584) >> 2];	// 584
+	UInt32								unk584[6];                      // 584
+	GrabMode							eGrabType;                      // 59C
+	UInt32								unk5A0[2];                      // 5A0
 	bool								bThirdPerson;					// 5A8
 	UInt8								isThirdPerson;					// 5A9	
 	UInt8								unk5AA;							// 5AA

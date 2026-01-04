@@ -31,7 +31,8 @@ namespace LootMenu
 	int JLMIndex = 0;
 	int ScrollOffset = 0;
 	int NumContainerItems = 0;
-	bool JLMVisible = false;
+	std::atomic<bool> JLMVisible{ false };
+	bool JLMRefresh = false;
 	bool JLMStealing = false;
 	bool shouldRunCloseContainerScript = false;
 	ControlCode ActivateContainerCode = ControlCode::Rest;
@@ -274,12 +275,15 @@ namespace LootMenu
 		return ref->extraDataList.HasType(kExtraData_Script);
 	}
 
-	void __fastcall SetVisible(bool isVisible)
+	void __fastcall SetVisible(bool isVisible, bool firstTime = false)
 	{
+		if (JLMVisible.exchange(isVisible) == isVisible && !firstTime)
+			return;
+
 		if (isVisible)
 		{
 			TESObjectREFR* newRef = HUDMainMenu::GetSingleton()->crosshairRef;
-			if (newRef && !IsLockedRef(newRef) && (JLMAllowOnScriptedContainers || !HasScript(newRef) || newRef->ResolveAshpile()->IsActor()))
+			if (!IsVATSKillCamActive() && newRef && !IsLockedRef(newRef) && !g_thePlayer->eGrabType && (!HasScript(newRef) || (!newRef->ResolveAshpile()->HasOpenCloseActivateScriptBlocks() && newRef->ResolveAshpile()->IsActor())))
 			{
 				newRef = newRef->ResolveAshpile();
 				if (newRef != ref)
@@ -296,6 +300,7 @@ namespace LootMenu
 
 					UpdateStealingColor();
 					RefreshItemDisplay();
+					JLMRefresh = true;
 
 					// trigger the OnOpen event
 					ExtraScript* xScript = GetExtraType(newRef->extraDataList, Script);
@@ -308,14 +313,18 @@ namespace LootMenu
 			else
 			{
 				isVisible = false;
+				JLMVisible.store(isVisible);
+				mainTile->SetFloat(kTileValue_visible, isVisible, 1);
 				ResetAndHideMenu();
 			}
 		}
+		else {
+			JLMVisible.store(JLMRefresh);
+			mainTile->SetFloat(kTileValue_visible, JLMRefresh, 1);
+		}
 
-		JLMVisible = isVisible;
-		mainTile->SetFloat(kTileValue_visible, isVisible, 1);
 
-		if (JLMHidePrompt)
+		if (JLMHidePrompt && !IsVATSKillCamActive())
 		{
 			auto hud = HUDMainMenu::GetSingleton();
 			if (isVisible)
@@ -422,7 +431,7 @@ namespace LootMenu
 		
 		mainTile->SetFloat(kTileValue_visible, 1, true);
 
-		SetVisible(false);
+		SetVisible(false, true);
 
 		return true;
 	}
@@ -638,7 +647,7 @@ namespace LootMenu
 		if (!ref) return;
 
 		auto hudRef = HUDMainMenu::GetSingleton()->crosshairRef;
-		if (!hudRef || !(hudRef->ResolveAshpile()->GetContainer()))
+		if (!hudRef || !(hudRef->ResolveAshpile()->GetContainer()) || hudRef->IsActor() != ref->IsActor())
 		{
 			ResetAndHideMenu();
 			SetVisible(false);
@@ -686,6 +695,20 @@ namespace LootMenu
 
 		SetTileComponentValue(mainTile, "_JLMInteract1", IsAltEquip() ? kPrompt_Equip : kPrompt_Take);
 		SetTileComponentValue(mainTile, "_JLMInteract2", IsAltEquip() ? kPrompt_TakeAll : kPrompt_Open);
+
+		if (!JLMRefresh)
+			return;
+		
+		static bool isNextFrame = false;
+		if (isNextFrame) {
+			JLMVisible.store(JLMRefresh);
+			mainTile->SetFloat(kTileValue_visible, JLMRefresh, 1);
+			RefreshItemDisplay();
+			JLMRefresh = false;
+			isNextFrame = false;
+			return;
+		}
+		isNextFrame = true;
 	}
 
 	namespace Hooks
@@ -723,6 +746,20 @@ namespace LootMenu
 			}
 		}
 
+		_declspec(naked) void __fastcall HideLootMenu_OnGrab() {
+			constexpr static UInt32 origAddr = 0x00475686; // Address after the fld
+			_asm
+			{
+				push    ecx
+				mov     ecx, 0
+				call    SetVisible
+				pop     ecx
+				sub     esp, 12             
+				fld     dword ptr[ecx + 4]
+				jmp     origAddr
+			}
+		}
+
 		void __fastcall OnContainerOpen_HideMenu(Menu* menu)
 		{
 			ThisCall(0x639DA0, menu);
@@ -732,28 +769,24 @@ namespace LootMenu
 
 		int __fastcall GetMouseScrollPreventIfLootMenuVisible(OSInputGlobals* input, void* edx, int _3)
 		{
-			if (JLMVisible) return 0;
+			if (JLMVisible.load()) return 0;
 			return input->mouseWheelScroll;
 		}
 
 		int __fastcall GetActivateKeyPressedAndNotLootMenuVisible(OSInputGlobals* input, void* edx, ControlCode controlCode, KeyState isPressed)
 		{
-			if (JLMVisible)
-			{
-				if (IsAltEquip()) return false;
-				controlCode = ActivateContainerCode;
-			}
-			return input->GetControlState(controlCode, isPressed);
+			if (JLMVisible.load() && IsAltEquip()) return false;
+			return input->GetControlState(JLMVisible.load() ? ActivateContainerCode : ControlCode::Activate, isPressed);
 		}
 
 		int __fastcall GetKeyPressedAndNotLootMenuVisible(OSInputGlobals* input, void* edx, ControlCode controlCode, KeyState isPressed)
 		{
-			return !JLMVisible && input->GetControlState(controlCode, isPressed);
+			return !JLMVisible.load() && input->GetControlState(controlCode, isPressed);
 		}
 
 		signed int __cdecl GetControllerStateAndNotLootMenuVisible(XboxControlCode code, bool state)
 		{
-			if (JLMVisible) return 1;
+			if (JLMVisible.load()) return 1;
 			return CdeclCall<signed int>(0x6211B0, code, state);
 		}
 
@@ -805,6 +838,9 @@ namespace LootMenu
 			WriteRelCall(0x61896F, UInt32(GetControllerStateAndNotLootMenuVisible)); // Up
 			WriteRelCall(0x61897A, UInt32(GetControllerStateAndNotLootMenuVisible)); // Right
 			WriteRelCall(0x618985, UInt32(GetControllerStateAndNotLootMenuVisible)); // Left
+
+			// hides loot menu when grabbing object/actor
+			WriteRelJump(0x00475680, UInt32((HideLootMenu_OnGrab)));
 
 			// set the button prompts when closing the start menu
 			startMenuCloseAddr = DetourRelCall(0x680563, UInt32(StartMenuClose_SetButtonPrompts));
