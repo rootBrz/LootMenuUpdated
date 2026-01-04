@@ -1,0 +1,6 @@
+code/.vs
+code/Release
+code/*.db
+common/Release
+common/Debug
+desktop.ini
