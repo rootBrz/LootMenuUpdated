@@ -3,6 +3,7 @@
 #include "decoding.h"
 #include "main.h"
 #include "Version.h"
+#include "Xinput.h"
 #include "LootMenu.h"
 
 extern "C"

@@ -32,6 +32,7 @@ namespace LootMenu
 	int ScrollOffset = 0;
 	int NumContainerItems = 0;
 	std::atomic<bool> JLMVisible{ false };
+	int isControllerEnabled = -1;
 	bool JLMRefresh = false;
 	bool JLMStealing = false;
 	bool shouldRunCloseContainerScript = false;
@@ -275,6 +276,42 @@ namespace LootMenu
 		return ref->extraDataList.HasType(kExtraData_Script);
 	}
 
+	bool IsControllerPresent(DWORD index = 0)
+	{
+		HMODULE xinput = GetModuleHandleA("XINPUT1_3.dll");
+		if (!xinput)
+			return false;
+
+		auto XInputGetState = (DWORD(WINAPI*)(DWORD, XINPUT_STATE*))GetProcAddress(xinput, "XInputGetState");
+
+		if (!XInputGetState)
+			return false;
+
+		XINPUT_STATE state{};
+		return XInputGetState(index, &state) == ERROR_SUCCESS;
+	}
+
+
+	void SetButtonPromptTexts()
+	{
+		auto input = OSInputGlobals::GetSingleton();
+		bool isControllerPresent = IsControllerPresent() && input->isControllerEnabled;
+
+		if (isControllerEnabled == isControllerPresent)
+			return;
+
+		char buf[0x20];
+		isControllerEnabled = isControllerPresent;
+
+		auto takeItemKey = isControllerEnabled ? 0x1E : input->keyBinds[TakeItemControlCode];
+		sprintf(buf, "%s)", GetDXDescription(takeItemKey));
+		SetTileComponentValue(mainTile, "_JLMButtonString1", buf);
+
+		auto activateContainerKey = isControllerEnabled ? 0x2D : input->keyBinds[ActivateContainerCode];
+		sprintf(buf, "%s)", GetDXDescription(activateContainerKey));
+		SetTileComponentValue(mainTile, "_JLMButtonString2", buf);
+	}
+
 	void __fastcall SetVisible(bool isVisible, bool firstTime = false)
 	{
 		if (JLMVisible.exchange(isVisible) == isVisible && !firstTime)
@@ -285,6 +322,7 @@ namespace LootMenu
 			TESObjectREFR* newRef = HUDMainMenu::GetSingleton()->crosshairRef;
 			if (!IsVATSKillCamActive() && newRef && !IsLockedRef(newRef) && g_thePlayer->eGrabType != PlayerCharacter::GrabMode::kGrabMode_ZKey && (!HasScript(newRef) || (!newRef->ResolveAshpile()->HasOpenCloseActivateScriptBlocks() && newRef->ResolveAshpile()->IsActor())))
 			{
+				SetButtonPromptTexts();
 				newRef = newRef->ResolveAshpile();
 				if (newRef != ref)
 				{
@@ -338,20 +376,6 @@ namespace LootMenu
 				hud->visibilityFlags |= HUDMainMenu::kInfo;
 			}
 		}
-	}
-
-	void SetButtonPromptTexts()
-	{
-		char buf[0x20];
-		auto input = OSInputGlobals::GetSingleton();
-
-		auto takeItemKey = input->keyBinds[TakeItemControlCode];
-		sprintf(buf, "%s)", GetDXDescription(takeItemKey));
-		SetTileComponentValue(mainTile, "_JLMButtonString1", buf);
-
-		auto activateContainerKey = input->keyBinds[ActivateContainerCode];
-		sprintf(buf, "%s)", GetDXDescription(activateContainerKey));
-		SetTileComponentValue(mainTile, "_JLMButtonString2", buf);
 	}
 
 	bool Init()
