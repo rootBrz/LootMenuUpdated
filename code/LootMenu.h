@@ -33,7 +33,7 @@ namespace LootMenu
 	int NumContainerItems = 0;
 	std::atomic<bool> JLMVisible{ false };
 	int isControllerEnabled = -1;
-	bool JLMRefresh = false;
+	std::atomic<bool> JLMRefresh{ false };
 	bool JLMStealing = false;
 	bool shouldRunCloseContainerScript = false;
 	ControlCode ActivateContainerCode = ControlCode::Rest;
@@ -312,70 +312,75 @@ namespace LootMenu
 		SetTileComponentValue(mainTile, "_JLMButtonString2", buf);
 	}
 
+	void HandlePrompt(bool lootMenuIsVisible) {
+
+		if (!JLMHidePrompt || IsVATSKillCamActive())
+			return;
+		
+		auto hud = HUDMainMenu::GetSingleton();
+		if (lootMenuIsVisible)
+		{
+			hud->info->SetFloat(kTileValue_visible, false, 0);
+			hud->visibilityFlags &= ~HUDMainMenu::kInfo;
+		}
+		else if (!(g_thePlayer->disabledControlFlags & PlayerCharacter::kControlFlag_RolloverText))
+		{
+			hud->info->SetFloat(kTileValue_visible, true, 0);
+			hud->visibilityFlags |= HUDMainMenu::kInfo;
+		}
+	}
+
 	void __fastcall SetVisible(bool isVisible, bool firstTime = false)
 	{
 		if (JLMVisible.exchange(isVisible) == isVisible && !firstTime)
 			return;
 
-		if (isVisible)
+		HandlePrompt(isVisible);
+
+		if (!isVisible) {
+			JLMRefresh.store(isVisible);
+			JLMVisible.store(isVisible);
+			mainTile->SetFloat(kTileValue_visible, isVisible, 1);
+			return;
+		}
+		
+		TESObjectREFR* newRef = HUDMainMenu::GetSingleton()->crosshairRef;
+		if (!IsVATSKillCamActive() && newRef && !IsLockedRef(newRef) && g_thePlayer->eGrabType != PlayerCharacter::GrabMode::kGrabMode_ZKey && (!HasScript(newRef) || (!newRef->ResolveAshpile()->HasOpenCloseActivateScriptBlocks() && newRef->ResolveAshpile()->IsActor())))
 		{
-			TESObjectREFR* newRef = HUDMainMenu::GetSingleton()->crosshairRef;
-			if (!IsVATSKillCamActive() && newRef && !IsLockedRef(newRef) && g_thePlayer->eGrabType != PlayerCharacter::GrabMode::kGrabMode_ZKey && (!HasScript(newRef) || (!newRef->ResolveAshpile()->HasOpenCloseActivateScriptBlocks() && newRef->ResolveAshpile()->IsActor())))
+			SetButtonPromptTexts();
+			newRef = newRef->ResolveAshpile();
+			if (newRef != ref)
 			{
-				SetButtonPromptTexts();
-				newRef = newRef->ResolveAshpile();
-				if (newRef != ref)
+				HandleChangedRefScripts();
+				s_tempContChangesEntries.DeleteAll();
+
+				SetContainer(newRef);
+				UpdateItems();
+				items.QuickSort(0, items.Size(), SortingFunctionLootMenu);
+
+				ScrollToIndex(0);
+				SetScrollOffset(0);
+
+				UpdateStealingColor();
+				RefreshItemDisplay();
+				JLMRefresh.store(true);
+
+				// trigger the OnOpen event
+				ExtraScript* xScript = GetExtraType(newRef->extraDataList, Script);
+				if (xScript && xScript->eventList)
 				{
-					HandleChangedRefScripts();
-					s_tempContChangesEntries.DeleteAll();
-
-					SetContainer(newRef);
-					UpdateItems();
-					items.QuickSort(0, items.Size(), SortingFunctionLootMenu);
-
-					ScrollToIndex(0);
-					SetScrollOffset(0);
-
-					UpdateStealingColor();
-					RefreshItemDisplay();
-					JLMRefresh = true;
-
-					// trigger the OnOpen event
-					ExtraScript* xScript = GetExtraType(newRef->extraDataList, Script);
-					if (xScript && xScript->eventList)
-					{
-						ThisCall(0x5183C0, xScript->eventList, g_thePlayer, kEvent_OnOpen);
-					}
+					ThisCall(0x5183C0, xScript->eventList, g_thePlayer, kEvent_OnOpen);
 				}
 			}
-			else
-			{
-				isVisible = false;
-				JLMVisible.store(isVisible);
-				mainTile->SetFloat(kTileValue_visible, isVisible, 1);
-				ResetAndHideMenu();
-			}
+			return;
 		}
-		else {
-			JLMVisible.store(JLMRefresh);
-			mainTile->SetFloat(kTileValue_visible, JLMRefresh, 1);
-		}
-
-
-		if (JLMHidePrompt && !IsVATSKillCamActive())
-		{
-			auto hud = HUDMainMenu::GetSingleton();
-			if (isVisible)
-			{
-				hud->info->SetFloat(kTileValue_visible, false, 0);
-				hud->visibilityFlags &= ~HUDMainMenu::kInfo;
-			}
-			else if (!(g_thePlayer->disabledControlFlags & PlayerCharacter::kControlFlag_RolloverText))
-			{
-				hud->info->SetFloat(kTileValue_visible, true, 0);
-				hud->visibilityFlags |= HUDMainMenu::kInfo;
-			}
-		}
+	
+		isVisible = false;
+		JLMRefresh.store(isVisible);
+		JLMVisible.store(isVisible);
+		SetContainer(nullptr);
+		mainTile->SetFloat(kTileValue_visible, isVisible, 1);
+		HandlePrompt(isVisible);
 	}
 
 	bool Init()
@@ -670,8 +675,8 @@ namespace LootMenu
 	{
 		if (!ref) return;
 
-		auto hudRef = HUDMainMenu::GetSingleton()->crosshairRef;
-		if (!hudRef || !(hudRef->ResolveAshpile()->GetContainer()) || hudRef != ref)
+		TESObjectREFR *hudRef = HUDMainMenu::GetSingleton()->crosshairRef;
+		if (!hudRef || !(hudRef->ResolveAshpile()->GetContainer()) || hudRef->ResolveAshpile() != ref->ResolveAshpile())
 		{
 			ResetAndHideMenu();
 			SetVisible(false);
@@ -720,15 +725,15 @@ namespace LootMenu
 		SetTileComponentValue(mainTile, "_JLMInteract1", IsAltEquip() ? kPrompt_Equip : kPrompt_Take);
 		SetTileComponentValue(mainTile, "_JLMInteract2", IsAltEquip() ? kPrompt_TakeAll : kPrompt_Open);
 
-		if (!JLMRefresh)
+		if (!JLMRefresh.load())
 			return;
 		
 		static bool isNextFrame = false;
 		if (isNextFrame) {
-			JLMVisible.store(JLMRefresh);
-			mainTile->SetFloat(kTileValue_visible, JLMRefresh, 1);
+			JLMVisible.store(JLMRefresh.load());
+			mainTile->SetFloat(kTileValue_visible, JLMRefresh.load(), 1);
 			RefreshItemDisplay();
-			JLMRefresh = false;
+			JLMRefresh.store(false);
 			isNextFrame = false;
 			return;
 		}
