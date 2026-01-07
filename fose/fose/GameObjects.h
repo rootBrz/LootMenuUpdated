@@ -223,6 +223,7 @@ public:
 	bool Activate(Actor* activator, char a2, int a3, int a4) { return ThisCall<bool>(0x4EE000, this, activator, a2, a3, a4); };
 	void PlayGroup(const char* name);
 	void RemoveOwnership();
+	bool HasActivateScriptBlock();
 };
 
 STATIC_ASSERT(offsetof(TESObjectREFR, baseForm) == 0x01C);

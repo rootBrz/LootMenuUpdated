@@ -43,7 +43,7 @@ const char* TESForm::GetTheName()
 {
 	if (IS_TYPE(this, TESObjectCELL) || IS_TYPE(this, TESWorldSpace))
 	{
-		return this->GetName();
+		return this->GetEditorID();
 	}
 	TESFullName* fullName = GetFullName();
 	return fullName ? fullName->name.CStr() : "";

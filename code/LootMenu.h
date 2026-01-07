@@ -237,7 +237,7 @@ namespace LootMenu
 				auto pRef = ref;
 
 				pRef->DisableScriptedActivate(true);
-				
+
 				// prevent container menu showing
 				NopFunctionCall(0x54FC37);
 				NopFunctionCall(0x4B758F);
@@ -274,6 +274,63 @@ namespace LootMenu
 	bool HasScript(TESObjectREFR* ref)
 	{
 		return ref->extraDataList.HasType(kExtraData_Script);
+	}
+
+	std::string ToLower(std::string s)
+	{
+		std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+		return s;
+	}
+
+	std::string GetWhitelistPath()
+	{
+		char path[MAX_PATH];
+		GetModuleFileNameA(LootMenuHandle, path, MAX_PATH);
+
+		std::string fullPath(path);
+		size_t pos = fullPath.find_last_of("\\/");
+		fullPath = fullPath.substr(0, pos + 1);
+
+		return fullPath + "lootMenuWhitelistedScripts.txt";
+	}
+
+	const std::unordered_set<std::string>& GetScriptWhitelist()
+	{
+		static std::unordered_set<std::string> whitelist;
+		static bool loaded = false;
+		if (loaded) return whitelist;
+
+		std::ifstream file(GetWhitelistPath());
+		if (!file.is_open()) return whitelist;
+
+		std::string line;
+		while (std::getline(file, line))
+		{
+			if (!line.empty() && (line.back() == '\r' || line.back() == '\n' || line.back() == ' ')) line.pop_back();
+			if (!line.empty()) whitelist.insert(ToLower(line));
+		}
+
+		loaded = true;
+		return whitelist;
+	}
+
+	bool IsScriptWhitelisted(TESObjectREFR* ref) {
+		TESForm* form = ref->baseForm;
+		Script* script;
+		if IS_TYPE(form, Script)
+			script = (Script*)form;
+		else
+		{
+			TESScriptableForm* scriptable = DYNAMIC_CAST(form, TESForm, TESScriptableForm);
+			script = scriptable ? scriptable->script : NULL;
+			if (!script) return false;
+		}
+
+		if (!script || !script->GetEditorID())
+			return false;
+
+		const auto& whitelist = GetScriptWhitelist();
+		return whitelist.find(ToLower(script->GetEditorID())) != whitelist.end();
 	}
 
 	bool IsControllerPresent(DWORD index = 0)
@@ -316,7 +373,7 @@ namespace LootMenu
 
 		if (!JLMHidePrompt || IsVATSKillCamActive())
 			return;
-		
+
 		auto hud = HUDMainMenu::GetSingleton();
 		if (lootMenuIsVisible)
 		{
@@ -343,9 +400,9 @@ namespace LootMenu
 			mainTile->SetFloat(kTileValue_visible, isVisible, 1);
 			return;
 		}
-		
+
 		TESObjectREFR* newRef = HUDMainMenu::GetSingleton()->crosshairRef;
-		if (!IsVATSKillCamActive() && newRef && !IsLockedRef(newRef) && g_thePlayer->eGrabType != PlayerCharacter::GrabMode::kGrabMode_ZKey && (!HasScript(newRef) || (!newRef->ResolveAshpile()->HasOpenCloseActivateScriptBlocks() && newRef->ResolveAshpile()->IsActor())))
+		if (!IsVATSKillCamActive() && newRef && !IsLockedRef(newRef) && g_thePlayer->eGrabType != PlayerCharacter::GrabMode::kGrabMode_ZKey && (!HasScript(newRef) || (!newRef->ResolveAshpile()->HasActivateScriptBlock() && newRef->ResolveAshpile()->IsActor()) || IsScriptWhitelisted(newRef->ResolveAshpile())))
 		{
 			SetButtonPromptTexts();
 			newRef = newRef->ResolveAshpile();
@@ -374,7 +431,7 @@ namespace LootMenu
 			}
 			return;
 		}
-	
+
 		isVisible = false;
 		JLMRefresh.store(isVisible);
 		JLMVisible.store(isVisible);
@@ -409,7 +466,7 @@ namespace LootMenu
 			ItemTiles[i] = item;
 		}
 
-		const UInt8 SortPriorities[] = { kFormType_Key, kFormType_Note, kFormType_Book, kFormType_Ammo, kFormType_AlchemyItem, kFormType_Weapon, kFormType_Armor, kFormType_Clothing, kFormType_Misc};
+		const UInt8 SortPriorities[] = { kFormType_Key, kFormType_Note, kFormType_Book, kFormType_Ammo, kFormType_AlchemyItem, kFormType_Weapon, kFormType_Armor, kFormType_Clothing, kFormType_Misc };
 		UInt8 priority = 255;
 		for (auto item : SortPriorities)
 		{
@@ -457,10 +514,11 @@ namespace LootMenu
 		}
 
 		SetTileComponentValue(mainTile, "_JLMStealing", 0.0F);
-		
+
 		mainTile->SetFloat(kTileValue_visible, 1, true);
 
 		SetVisible(false, true);
+		GetScriptWhitelist();
 
 		return true;
 	}
@@ -568,16 +626,16 @@ namespace LootMenu
 
 			bool shouldKeepOwnership = !ref->IsActor();
 
-			if (IsAltEquip())
+			if (IsAltEquip() && NOT_ID(itemRef->baseForm, Ammo))
 			{
 				if (IsDroppedWeapon(item))
 				{
 					// nop call to PlaySound to prevent double pickup/equip sound
 					NopFunctionCall(0x7766BD, 3);
-				
+
 					g_thePlayer->HandlePickupItem(itemRef, 1, false);
 					g_thePlayer->EquipRef(itemRef);
-					
+
 					WriteRelCall(0x7766BD, 0x6F7D90);
 				}
 				else
@@ -675,7 +733,7 @@ namespace LootMenu
 	{
 		if (!ref) return;
 
-		TESObjectREFR *hudRef = HUDMainMenu::GetSingleton()->crosshairRef;
+		TESObjectREFR* hudRef = HUDMainMenu::GetSingleton()->crosshairRef;
 		if (!hudRef || !(hudRef->ResolveAshpile()->GetContainer()) || hudRef->ResolveAshpile() != ref->ResolveAshpile())
 		{
 			ResetAndHideMenu();
@@ -701,7 +759,7 @@ namespace LootMenu
 				RefreshItemDisplay();
 			}
 		}
-		
+
 		if (NumContainerItems)
 		{
 			if (inputGlobals->GetControlState(TakeItemControlCode, isPressed))
@@ -727,7 +785,7 @@ namespace LootMenu
 
 		if (!JLMRefresh.load())
 			return;
-		
+
 		static bool isNextFrame = false;
 		if (isNextFrame) {
 			JLMVisible.store(JLMRefresh.load());
@@ -769,9 +827,9 @@ namespace LootMenu
 				mov cl, 1
 				call SetVisible
 
-			NotContainer:
+				NotContainer :
 				mov eax, dword ptr ds : [esi * 4 + 0x10733C0]
-				ret
+					ret
 			}
 		}
 
@@ -788,6 +846,10 @@ namespace LootMenu
 
 				push    0
 				call    SetContainer
+				add     esp, 4
+
+				push    0
+				call    HandlePrompt
 				add     esp, 4
 
 				popfd

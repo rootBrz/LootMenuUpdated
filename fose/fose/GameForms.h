@@ -381,9 +381,9 @@ public:
 	virtual bool	Unk_47(void);
 	virtual bool	Unk_48(UInt32 formType);	// returns if the same FormType is passed in
 	virtual bool	Unk_49(void * arg0, void * arg1, void * arg2, void * arg3, void * arg4);
-	virtual void	SetRefID(UInt32 refID, bool generateID);
-	virtual char *	GetName2(void);
-	virtual char *	GetName(void);
+	virtual void	SetFormID(UInt32 aiID, bool abUpdateFile);
+	virtual char *	GetObjectTypeName(void);
+	virtual char *	GetEditorID(void);
 	virtual bool	SetEditorID(const char * edid);		// simply returns true at run-time
 	// 4E
 

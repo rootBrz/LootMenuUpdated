@@ -1918,6 +1918,31 @@ bool TESObjectREFR::HasOpenCloseActivateScriptBlocks()
 	return false;
 }
 
+bool TESObjectREFR::HasActivateScriptBlock()
+{
+	TESForm* form = baseForm;
+	Script* script;
+	if IS_TYPE(form, Script)
+		script = (Script*)form;
+	else
+	{
+		TESScriptableForm* scriptable = DYNAMIC_CAST(form, TESForm, TESScriptableForm);
+		script = scriptable ? scriptable->script : NULL;
+		if (!script) return false;
+	}
+	UInt8* typePtr;
+	for (ScriptBlockIterator blockIter(script->data, script->info.dataLength); !blockIter.End(); blockIter.Next())
+	{
+		typePtr = blockIter.TypePtr();
+
+		if (*typePtr == kScript_OnActivate)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 void TESObjectREFR::DisableScriptedActivate(bool disable)
 {
 	ExtraScript* xScript = GetExtraType(this->extraDataList, Script);

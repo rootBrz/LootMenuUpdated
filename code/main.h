@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <regex>
 #include <list>
+#include <unordered_set>
 #include "settings.h"
 
 bool versionCheck(const FOSEInterface* fose);
