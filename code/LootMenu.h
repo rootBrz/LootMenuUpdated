@@ -392,8 +392,6 @@ namespace LootMenu
 		if (JLMVisible.exchange(isVisible) == isVisible && !firstTime)
 			return;
 
-		HandlePrompt(isVisible);
-
 		if (!isVisible) {
 			JLMRefresh.store(isVisible);
 			JLMVisible.store(isVisible);
@@ -437,7 +435,6 @@ namespace LootMenu
 		JLMVisible.store(isVisible);
 		SetContainer(nullptr);
 		mainTile->SetFloat(kTileValue_visible, isVisible, 1);
-		HandlePrompt(isVisible);
 	}
 
 	bool Init()
@@ -731,6 +728,7 @@ namespace LootMenu
 
 	void Update()
 	{
+		HandlePrompt(JLMVisible.load());
 		if (!ref) return;
 
 		TESObjectREFR* hudRef = HUDMainMenu::GetSingleton()->crosshairRef;
@@ -760,7 +758,7 @@ namespace LootMenu
 			}
 		}
 
-		if (NumContainerItems)
+		if (NumContainerItems && mainTile->GetValueFloat(kTileValue_visible))
 		{
 			if (inputGlobals->GetControlState(TakeItemControlCode, isPressed))
 			{
@@ -812,6 +810,11 @@ namespace LootMenu
 			{
 				mov cl, 1
 				call SetVisible
+
+				push    1
+				call    HandlePrompt
+				add     esp, 4
+
 				mov ecx, dword ptr ds : [0xF654A8]
 				ret
 			}
@@ -826,6 +829,10 @@ namespace LootMenu
 
 				mov cl, 1
 				call SetVisible
+
+				push    1
+				call    HandlePrompt
+				add     esp, 4
 
 				NotContainer :
 				mov eax, dword ptr ds : [esi * 4 + 0x10733C0]
