@@ -644,6 +644,7 @@ namespace LootMenu
 
 	bool IsAltEquip()
 	{
+		if (!JLMEnableQuickUse) return false;
 		return IsShiftHeld() || GetXIControlHeld(kXboxCtrl_DPAD_LEFT) || GetXIControlHeld(kXboxCtrl_DPAD_RIGHT);
 	}
 

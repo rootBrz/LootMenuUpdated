@@ -20,6 +20,7 @@ float JLMTextAdjust = 8.0;
 float JLMJustifyX = 0;
 float JLMJustifyY = 1.0;
 bool JLMAllowOnScriptedContainers = 0;
+int JLMEnableQuickUse = 1;
 
 extern HMODULE LootMenuHandle;
 
@@ -47,4 +48,10 @@ void handleIniOptions()
 	JLMJustifyX = GetPrivateProfileInt("Main", "iJustifyX", 0, iniPath);
 	JLMJustifyY = GetPrivateProfileInt("Main", "iJustifyY", 1, iniPath);
 	JLMAllowOnScriptedContainers = GetPrivateProfileInt("Main", "bAllowOnScriptedContainers", 0, iniPath);
+	JLMEnableQuickUse = GetPrivateProfileInt("Main", "bAllowQuickUse", -1, iniPath);
+
+	if (JLMEnableQuickUse == -1) {
+		WritePrivateProfileStringA("Main", "bAllowQuickUse", "1", iniPath);
+		JLMEnableQuickUse = 1;
+	}
 }
