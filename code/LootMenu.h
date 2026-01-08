@@ -718,6 +718,24 @@ namespace LootMenu
 		}
 	}
 
+	void RunOnActivateBlock() {
+		// prevent container menu showing
+		NopFunctionCall(0x54FC37);
+		NopFunctionCall(0x4B758F);
+		NopFunctionCall(0x5572DA);
+
+		// prevent the container playing the open animation, since the container menu would show when it ends
+		SafeWrite8(0x44E120, 0xC3);
+
+		ref->Activate(g_thePlayer, 0, 0, 1);
+
+		SafeWrite8(0x44E120, 0x56);
+
+		WriteRelCall(0x54FC37, 0x61D5A0);
+		WriteRelCall(0x4B758F, 0x61D5A0);
+		WriteRelCall(0x5572DA, 0x61D5A0);
+	}
+
 	void TakeAllItems()
 	{
 		int numItems = items.Size();
@@ -804,11 +822,13 @@ namespace LootMenu
 		{
 			if (inputGlobals->GetControlState(TakeItemControlCode, isPressed))
 			{
+				RunOnActivateBlock();
 				TakeOrUseSelectedItem();
 				RefreshItemDisplay();
 			}
 			else if (inputGlobals->GetControlState(ActivateContainerCode, isPressed) && IsAltEquip())
 			{
+				RunOnActivateBlock();
 				TakeAllItems();
 				PlayGameSound("UIItemTakeAll");
 				RefreshItemDisplay();
