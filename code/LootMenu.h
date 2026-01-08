@@ -333,6 +333,36 @@ namespace LootMenu
 		return whitelist.find(ToLower(script->GetEditorID())) != whitelist.end();
 	}
 
+	void AddScriptToWhitelist(TESObjectREFR* ref)
+	{
+		TESForm* form = ref->baseForm;
+		Script* script;
+		if IS_TYPE(form, Script)
+			script = (Script*)form;
+		else
+		{
+			TESScriptableForm* scriptable = DYNAMIC_CAST(form, TESForm, TESScriptableForm);
+			script = scriptable ? scriptable->script : NULL;
+			if (!script) return;
+		}
+
+		if (!script || !script->GetEditorID())
+			return;
+
+		std::string lowerID = ToLower(script->GetEditorID());
+
+		auto& whitelist = const_cast<std::unordered_set<std::string>&>(GetScriptWhitelist());
+		if (whitelist.find(lowerID) != whitelist.end()) return;
+
+		whitelist.insert(lowerID);
+		std::ofstream file(GetWhitelistPath(), std::ios_base::app);
+		if (file.is_open())
+		{
+			file << std::endl << lowerID;
+			file.close();
+		}
+	}
+
 	bool IsControllerPresent(DWORD index = 0)
 	{
 		HMODULE xinput = GetModuleHandleA("XINPUT1_3.dll");
@@ -608,6 +638,10 @@ namespace LootMenu
 		return result;
 	}
 
+	bool IsAddScriptToWhiteList() {
+		return IsShiftHeld() && IsAltHeld() && IsCtrlHeld() && IsKeyHeld(VK_RETURN);
+	}
+
 	bool IsAltEquip()
 	{
 		return IsShiftHeld() || GetXIControlHeld(kXboxCtrl_DPAD_LEFT) || GetXIControlHeld(kXboxCtrl_DPAD_RIGHT);
@@ -729,6 +763,14 @@ namespace LootMenu
 	void Update()
 	{
 		HandlePrompt(JLMVisible.load());
+
+		if (IsAddScriptToWhiteList()) {
+			if (HUDMainMenu* hud = HUDMainMenu::GetSingleton(); hud && hud->crosshairRef) {
+				TESObjectREFR* target = hud->crosshairRef->ResolveAshpile();
+				if (target->GetContainer()) AddScriptToWhitelist(target);
+			}
+		}
+
 		if (!ref) return;
 
 		TESObjectREFR* hudRef = HUDMainMenu::GetSingleton()->crosshairRef;

@@ -1406,3 +1406,18 @@ bool IsShiftHeld()
 {
 	return GetAsyncKeyState(VK_SHIFT) < 0;
 }
+
+bool IsCtrlHeld()
+{
+	return GetAsyncKeyState(VK_CONTROL) < 0;
+}
+
+bool IsAltHeld()
+{
+	return GetAsyncKeyState(VK_MENU) < 0;
+}
+
+bool IsKeyHeld(unsigned char key)
+{
+	return GetAsyncKeyState(key) < 0;
+}

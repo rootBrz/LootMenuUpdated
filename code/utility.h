@@ -284,3 +284,6 @@ char* stristr(const char* str1, const char* str2);
 double Remap(float outputMin, float outputMax, float min, float max, float input);
 
 bool IsShiftHeld();
+bool IsCtrlHeld();
+bool IsAltHeld();
+bool IsKeyHeld(unsigned char key);
